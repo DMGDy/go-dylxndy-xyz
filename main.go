@@ -11,9 +11,37 @@ const (
 	MAX_HEADER_LEN = 1024*4
 )
 
+type HeaderField int
+const (
+	RequestLine = iota + 1
+	Host
+	UserAgent
+	Accept
+	Connection
+	Referer
+)
+
+
 func parseHeader(header string) {
-	
+	lines := strings.Split(header, "\n")
+	for line_n , line := range lines {
+		if line_n == 0 {
+			log.Printf("%s\n", line)
+		}
+		parts := strings.SplitN(line, ": ", 2)
+		for part_n, part := range parts {
+			if part_n == 1 {
+				vals := strings.Split(part, ",")
+				for _, val := range vals {
+					log.Printf("\t%s\n", val)
+				}
+			}
+
+		}
+	}
 }
+
+
 
 func isCompleteHeader(header string) bool {
 	if strings.Contains(header, "\r\n\r\n") || strings.Contains(header, "\n\n") {
@@ -46,7 +74,11 @@ func server(client net.Conn) {
 		return
 	}
 
+
 	log.Printf("%s\n", header)
+
+	parseHeader(header)
+
 	response := "Hello, World!"
 	n, err = client.Write([]byte(response))
 	
