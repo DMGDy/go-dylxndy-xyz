@@ -1,5 +1,24 @@
+/* go-server
+ * Copyright (C) 2025 Dylan Dy <dylangarza1909@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package main
 import (
+	"errors"
+	"fmt"
 	"net"
 	"log"
 	"crypto/tls"
@@ -11,37 +30,104 @@ const (
 	MAX_HEADER_LEN = 1024*4
 )
 
-type HeaderField int
-const (
-	RequestLine = iota + 1
-	Host
-	UserAgent
-	Accept
-	Connection
-	Referer
-)
-
-
-func parseHeader(header string) {
-	lines := strings.Split(header, "\n")
-	for line_n , line := range lines {
-		if line_n == 0 {
-			log.Printf("%s\n", line)
-		}
-		parts := strings.SplitN(line, ": ", 2)
-		for part_n, part := range parts {
-			if part_n == 1 {
-				vals := strings.Split(part, ",")
-				for _, val := range vals {
-					log.Printf("\t%s\n", val)
-				}
-			}
-
-		}
-	}
+type RequestHeader struct {
+	method string
+	path int
+	version string
+	ua string
+	accept []string
+	ref string
+	keep_alive bool
 }
 
+type RequestLine  int
+const (
+	Method = iota
+	File
+	HTTPVersion
+)
 
+var files = [...]string{
+	"/error.html",
+	"/",
+	"/index.html" ,
+	"/styles.css",
+	"/favicon.ico",
+	"/assets/android-chrome-192x192.png" ,
+	"/assets/android-chrome-512x512.png",
+	"/assets/apple-touch-icon.png",
+	"/assets/favicon-16x16.png",
+	"/assets/favicon-32x32.png",
+	"/assets/favicon.ico",
+	"/assets/trollface-drift-phonk.gif",
+	"/assets/buttons/agplv3.png",
+	"/assets/buttons/archlinux.gif",
+	"/assets/buttons/linux_powered.gif",
+	"/assets/buttons/vim.gif",
+	"/assets/buttons/wget.gif",
+}
+
+func validFile(requested string) bool {
+	for _, file := range files {
+		if requested == file {
+			return true
+		}
+	}
+	return false
+}
+
+func parseHeader(header string) (*RequestHeader, error) {
+	lines := strings.Split(header, "\n")
+
+	// if less than 2 lines or more than 16, something is not right
+	if len(lines) < 2 || len(lines) > 16 {
+		return nil, errors.New("Malformed or incorrect Header\n") 
+	}
+
+	var rq RequestHeader
+
+	for line_n, line := range lines {
+		// first line is request line
+		if line_n == 0 {
+			rql_parts := strings.Split(line, " ")
+
+			for part_n, part := range rql_parts {
+				switch part_n {
+				case Method:
+					if part != "GET" {
+						return nil, errors.New("Not Supported Request Method\n")
+					}
+					rq.method = part
+				case File:
+					if !validFile(part) {
+						return nil, errors.New("Cannot request file")
+					}
+					fmt.Printf("Requested Path: %s\n", part)
+				case HTTPVersion:
+					fmt.Printf("HTTP Version: %s\n", part)
+				}
+			}
+			continue
+		}
+		fields := strings.SplitN(line, ": ", 2)
+		for field_n, field := range fields {
+
+			// first part tells what im looking at
+			if field_n == 0 {
+				fmt.Printf("%s\n",field)
+				continue
+			}
+
+			parts := strings.Split(field, ",")
+			fmt.Printf("\t")
+			for _, part := range parts {
+				fmt.Printf("%s ", part)
+			}
+			fmt.Printf("\n");
+		}
+	}
+	return &rq, nil
+}
 
 func isCompleteHeader(header string) bool {
 	if strings.Contains(header, "\r\n\r\n") || strings.Contains(header, "\n\n") {
@@ -77,7 +163,13 @@ func server(client net.Conn) {
 
 	log.Printf("%s\n", header)
 
-	parseHeader(header)
+	header_info, err := parseHeader(header)
+	if err != nil {
+		log.Printf("Error Parsing request: %s\n",err.Error())
+		client.Close()
+		return
+	}
+	log.Printf("Method: %s\n", header_info.method)
 
 	response := "Hello, World!"
 	n, err = client.Write([]byte(response))
