@@ -47,6 +47,15 @@ const (
 	HTTPVersion
 )
 
+type RequestFields int
+const (
+	Skip = iota
+	UserAgent
+	Accept
+	Referer
+	KeepAlive
+)
+
 var files = [...]string{
 	"/error.html",
 	"/",
@@ -67,63 +76,85 @@ var files = [...]string{
 	"/assets/buttons/wget.gif",
 }
 
-func validFile(requested string) bool {
-	for _, file := range files {
+func getFile(requested string) int {
+	for n, file := range files {
+		log.Printf("%s ?= %s\n", requested, file)
 		if requested == file {
-			return true
+			return n
 		}
 	}
-	return false
+	return 0
 }
 
 func parseHeader(header string) (*RequestHeader, error) {
 	lines := strings.Split(header, "\n")
 
-	// if less than 2 lines or more than 16, something is not right
-	if len(lines) < 2 || len(lines) > 16 {
+	// if less than 2 lines or more than 32, something is not right
+	if len(lines) < 2 || len(lines) > 32{
 		return nil, errors.New("Malformed or incorrect Header\n") 
 	}
 
-	var rq RequestHeader
+	rq := RequestHeader{}
 
 	for line_n, line := range lines {
 		// first line is request line
 		if line_n == 0 {
-			rql_parts := strings.Split(line, " ")
+			rql_values := strings.Split(line, " ")
 
-			for part_n, part := range rql_parts {
-				switch part_n {
+			for n, value := range rql_values {
+				switch n {
 				case Method:
-					if part != "GET" {
+					if value != "GET" {
 						return nil, errors.New("Not Supported Request Method\n")
 					}
-					rq.method = part
+					rq.method = value
 				case File:
-					if !validFile(part) {
-						return nil, errors.New("Cannot request file")
-					}
-					fmt.Printf("Requested Path: %s\n", part)
+					file_index := getFile(value)
+					rq.path = file_index
+					fmt.Printf("Requested Path: %s\n", value)
 				case HTTPVersion:
-					fmt.Printf("HTTP Version: %s\n", part)
+					rq.version = value
+					fmt.Printf("HTTP Version: %s\n", value)
 				}
 			}
 			continue
 		}
 		fields := strings.SplitN(line, ": ", 2)
+		header_field := 0
 		for field_n, field := range fields {
-
+			
 			// first part tells what im looking at
 			if field_n == 0 {
-				fmt.Printf("%s\n",field)
+				if field == "User-Agent" {
+					header_field = UserAgent
+				} else if field == "Accept" {
+					header_field = Accept
+				} else if field == "Connection" {
+					header_field = KeepAlive
+				} else {
+					header_field = Skip
+				}
 				continue
 			}
-
-			parts := strings.Split(field, ",")
-			fmt.Printf("\t")
-			for _, part := range parts {
-				fmt.Printf("%s ", part)
+			switch header_field {
+			case Skip:
+				continue
+			case UserAgent: 
+				rq.ua = field
+			case KeepAlive:
+				if field == ""{
+					rq.keep_alive = true
+				} else {
+					rq.keep_alive = false
+				}
 			}
-			fmt.Printf("\n");
+
+			//parts := strings.Split(field, ",")
+			//fmt.Printf("\t")
+			//for _, part := range parts {
+			//	fmt.Printf("%s ", part)
+			//}
+			//fmt.Printf("\n");
 		}
 	}
 	return &rq, nil
@@ -180,10 +211,8 @@ func server(client net.Conn) {
 		return
 	}
 
-
 	client.Close()
 }
-
 
 func main() {
 
@@ -215,6 +244,5 @@ func main() {
 		go server(client)
 
 	}
-
 
 }
