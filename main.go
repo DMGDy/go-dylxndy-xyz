@@ -30,7 +30,8 @@ const (
 	MAX_HEADER_LEN = 1024*4
 )
 
-type RequestHeader struct {
+type RequestInfo struct {
+	ip_addr string
 	method string
 	path int
 	version string
@@ -51,7 +52,6 @@ type RequestFields int
 const (
 	Skip = iota
 	UserAgent
-	Accept
 	Referer
 	KeepAlive
 )
@@ -76,6 +76,26 @@ var files = [...]string{
 	"/assets/buttons/wget.gif",
 }
 
+var mime_types = [...]string{
+	"text/html",
+	"text/html",
+	"text/html",
+	"text/css",
+	"image/x-icon",
+	"image/png",
+	"image/png",
+	"image/png",
+	"image/png",
+	"image/png",
+	"image/x-icon",
+	"image/gif",
+	"image/png",
+	"image/gif",
+	"image/gif",
+	"image/gif",
+	"image/gif",
+}
+
 func getFile(requested string) int {
 	for n, file := range files {
 		log.Printf("%s ?= %s\n", requested, file)
@@ -90,11 +110,11 @@ func parseHeader(header string) (*RequestHeader, error) {
 	lines := strings.Split(header, "\n")
 
 	// if less than 2 lines or more than 32, something is not right
-	if len(lines) < 2 || len(lines) > 32{
+	if len(lines) < 2 || len(lines) > 32 {
 		return nil, errors.New("Malformed or incorrect Header\n") 
 	}
 
-	rq := RequestHeader{}
+	rq := RequestInfo{}
 
 	for line_n, line := range lines {
 		// first line is request line
@@ -111,10 +131,8 @@ func parseHeader(header string) (*RequestHeader, error) {
 				case File:
 					file_index := getFile(value)
 					rq.path = file_index
-					fmt.Printf("Requested Path: %s\n", value)
 				case HTTPVersion:
 					rq.version = value
-					fmt.Printf("HTTP Version: %s\n", value)
 				}
 			}
 			continue
@@ -127,8 +145,6 @@ func parseHeader(header string) (*RequestHeader, error) {
 			if field_n == 0 {
 				if field == "User-Agent" {
 					header_field = UserAgent
-				} else if field == "Accept" {
-					header_field = Accept
 				} else if field == "Connection" {
 					header_field = KeepAlive
 				} else {
@@ -142,19 +158,12 @@ func parseHeader(header string) (*RequestHeader, error) {
 			case UserAgent: 
 				rq.ua = field
 			case KeepAlive:
-				if field == ""{
+				if strings.toLower(field) == "keep-alive" {
 					rq.keep_alive = true
 				} else {
 					rq.keep_alive = false
 				}
 			}
-
-			//parts := strings.Split(field, ",")
-			//fmt.Printf("\t")
-			//for _, part := range parts {
-			//	fmt.Printf("%s ", part)
-			//}
-			//fmt.Printf("\n");
 		}
 	}
 	return &rq, nil
@@ -167,7 +176,7 @@ func isCompleteHeader(header string) bool {
 	return false
 }
 
-func server(client net.Conn) {
+func Server(client net.Conn) {
 	log.Printf("New client: %s\n", client.RemoteAddr())
 	buffer := make([]byte, MAX_HEADER_LEN)
 
@@ -191,15 +200,15 @@ func server(client net.Conn) {
 		return
 	}
 
+	request_info, err := parseHeader(header)
 
-	log.Printf("%s\n", header)
-
-	header_info, err := parseHeader(header)
 	if err != nil {
 		log.Printf("Error Parsing request: %s\n",err.Error())
 		client.Close()
 		return
 	}
+
+
 	log.Printf("Method: %s\n", header_info.method)
 
 	response := "Hello, World!"
@@ -241,7 +250,7 @@ func main() {
 			continue
 		}
 
-		go server(client)
+		go Server(client)
 
 	}
 
