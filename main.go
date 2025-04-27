@@ -23,6 +23,7 @@ import (
 	"log"
 	"crypto/tls"
 	"strings"
+	"os"
 )
 
 const (
@@ -30,13 +31,12 @@ const (
 	MAX_HEADER_LEN = 1024*4
 )
 
-type RequestInfo struct {
-	ip_addr string
+type RequestHeader struct {
 	method string
 	path int
 	version string
 	ua string
-	accept []string
+	accept string
 	ref string
 	keep_alive bool
 }
@@ -52,6 +52,7 @@ type RequestFields int
 const (
 	Skip = iota
 	UserAgent
+	Accept
 	Referer
 	KeepAlive
 )
@@ -76,8 +77,9 @@ var files = [...]string{
 	"/assets/buttons/wget.gif",
 }
 
+// types mapped to the same index as file
 var mime_types = [...]string{
-	"text/html",
+	"text/html",                                                                              
 	"text/html",
 	"text/html",
 	"text/css",
@@ -96,9 +98,17 @@ var mime_types = [...]string{
 	"image/gif",
 }
 
+var debug = false
+
+func sendResponse(rq_info RequestInfo) (int, err) {
+
+}
+
 func getFile(requested string) int {
 	for n, file := range files {
-		log.Printf("%s ?= %s\n", requested, file)
+		if debug {
+			log.Printf("%s ?= %s\n", requested, file)
+		}
 		if requested == file {
 			return n
 		}
@@ -114,7 +124,8 @@ func parseHeader(header string) (*RequestHeader, error) {
 		return nil, errors.New("Malformed or incorrect Header\n") 
 	}
 
-	rq := RequestInfo{}
+	rq := RequestHeader{}
+	file_index := 0
 
 	for line_n, line := range lines {
 		// first line is request line
@@ -129,10 +140,16 @@ func parseHeader(header string) (*RequestHeader, error) {
 					}
 					rq.method = value
 				case File:
-					file_index := getFile(value)
+					file_index = getFile(value)
 					rq.path = file_index
+					if debug{
+						fmt.Printf("Requested Path: %s\n", value)
+					}
 				case HTTPVersion:
 					rq.version = value
+					if debug {
+						fmt.Printf("HTTP Version: %s\n", value)
+					}
 				}
 			}
 			continue
@@ -143,11 +160,14 @@ func parseHeader(header string) (*RequestHeader, error) {
 			
 			// first part tells what im looking at
 			if field_n == 0 {
-				if field == "User-Agent" {
+				switch field {
+				case "User-Agent":
 					header_field = UserAgent
-				} else if field == "Connection" {
+				case "Accept":
+					header_field = Accept
+				case "Connection":
 					header_field = KeepAlive
-				} else {
+				default:
 					header_field = Skip
 				}
 				continue
@@ -157,8 +177,10 @@ func parseHeader(header string) (*RequestHeader, error) {
 				continue
 			case UserAgent: 
 				rq.ua = field
+			case Accept:
+				rq.accept = mime_types[rq.path]
 			case KeepAlive:
-				if strings.toLower(field) == "keep-alive" {
+				if strings.ToLower(field) == "keep-alive" {
 					rq.keep_alive = true
 				} else {
 					rq.keep_alive = false
@@ -170,6 +192,7 @@ func parseHeader(header string) (*RequestHeader, error) {
 }
 
 func isCompleteHeader(header string) bool {
+	// who knows what a web browser sends today
 	if strings.Contains(header, "\r\n\r\n") || strings.Contains(header, "\n\n") {
 		return true
 	}
@@ -200,19 +223,18 @@ func Server(client net.Conn) {
 		return
 	}
 
-	request_info, err := parseHeader(header)
 
-	if err != nil {
+	log.Printf("%s\n", header)
+
+	rq_info, err := parseHeader(header)
+
+	if err != nil  || rq_info == nil {
 		log.Printf("Error Parsing request: %s\n",err.Error())
 		client.Close()
 		return
 	}
 
-
-	log.Printf("Method: %s\n", header_info.method)
-
-	response := "Hello, World!"
-	n, err = client.Write([]byte(response))
+	bytes, err := sendResponse(header_info)
 	
 	if err != nil {
 		log.Printf("Error writing back to client: %s\n",err.Error())
@@ -224,6 +246,12 @@ func Server(client net.Conn) {
 }
 
 func main() {
+
+	arg := string(os.Args[1])
+
+	if arg == "-debug" {
+		debug = true
+	} 
 
 	cert, err := tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
 
