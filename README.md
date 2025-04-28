@@ -14,3 +14,5 @@ This doesn't depend on anything else so:
 ```
 go build -o dylxndy_server main.go
 ```
+Note: this assumes you have the propper X509 Key Pairs in locally in `cert/` as
+`cert/cert.pem` and `cert/key.pem`
