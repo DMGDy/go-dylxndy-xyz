@@ -58,23 +58,23 @@ const (
 )
 
 var files = [...]string{
-	"/error.html",
-	"/",
-	"/index.html" ,
-	"/styles.css",
-	"/favicon.ico",
-	"/assets/android-chrome-192x192.png" ,
-	"/assets/android-chrome-512x512.png",
-	"/assets/apple-touch-icon.png",
-	"/assets/favicon-16x16.png",
-	"/assets/favicon-32x32.png",
-	"/assets/favicon.ico",
-	"/assets/trollface-drift-phonk.gif",
-	"/assets/buttons/agplv3.png",
-	"/assets/buttons/archlinux.gif",
-	"/assets/buttons/linux_powered.gif",
-	"/assets/buttons/vim.gif",
-	"/assets/buttons/wget.gif",
+	"error.html",
+	"",
+	"index.html" ,
+	"styles.css",
+	"favicon.ico",
+	"assets/android-chrome-192x192.png" ,
+	"assets/android-chrome-512x512.png",
+	"assets/apple-touch-icon.png",
+	"assets/favicon-16x16.png",
+	"assets/favicon-32x32.png",
+	"assets/favicon.ico",
+	"assets/trollface-drift-phonk.gif",
+	"assets/buttons/agplv3.png",
+	"assets/buttons/archlinux.gif",
+	"assets/buttons/linux_powered.gif",
+	"assets/buttons/vim.gif",
+	"assets/buttons/wget.gif",
 }
 
 // types mapped to the same index as file
@@ -100,8 +100,32 @@ var mime_types = [...]string{
 
 var debug = false
 
-func sendResponse(rq_info RequestInfo) (int, err) {
+func sendResponse(client net.Conn, rq_info RequestHeader) (int, error) {
+	/* open file
+	 * construct response
+	 * send response
+	 * send file
+	*/
 
+	file_bytes, err := os.ReadFile("dylxndy.xyz/" + files[rq_info.path])
+	if err != nil {
+			return 1, err
+	}
+
+	content_length := len(file_bytes)
+	
+	response := fmt.Sprintf("HTTP/1.1 200 OK\n"+
+							"Server: epic-server v420.69 (Linux)\n"+
+							"Accept-Ranges: Bytes\n"+
+							"Connection: Keep-Alive\n"+
+							"Content-Type: %s\n"+
+							"Content-Length: %d"+
+							"\r\n\r\n", mime_types[rq_info.path], content_length)
+	_, err = client.Write([]byte(response))
+
+	written, err := client.Write(file_bytes)
+
+	return written, nil
 }
 
 func getFile(requested string) int {
@@ -109,7 +133,10 @@ func getFile(requested string) int {
 		if debug {
 			log.Printf("%s ?= %s\n", requested, file)
 		}
-		if requested == file {
+		if requested[1:] == file {
+			if n == 1 { 
+				n = n + 1
+			}
 			return n
 		}
 	}
@@ -234,7 +261,7 @@ func Server(client net.Conn) {
 		return
 	}
 
-	bytes, err := sendResponse(header_info)
+	bytes, err := sendResponse(client, *rq_info)
 	
 	if err != nil {
 		log.Printf("Error writing back to client: %s\n",err.Error())
@@ -242,16 +269,13 @@ func Server(client net.Conn) {
 		return
 	}
 
+	log.Printf("Wrote back %d bytes", bytes)
+
 	client.Close()
 }
 
 func main() {
 
-	arg := string(os.Args[1])
-
-	if arg == "-debug" {
-		debug = true
-	} 
 
 	cert, err := tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
 
