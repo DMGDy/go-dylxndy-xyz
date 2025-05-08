@@ -78,6 +78,7 @@ var files = [...]string{
 }
 
 // types mapped to the same index as file
+
 var mime_types = [...]string{
 	"text/html",                                                                              
 	"text/html",
@@ -99,6 +100,32 @@ var mime_types = [...]string{
 }
 
 var debug = false
+var log_file_path = ""
+
+func logStdout(message string) {
+	if debug {
+		log.Println(message)
+	}
+}
+
+func logFile(messages <- chan string) {
+	file, err := os.OpenFile(log_file_path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+
+	if err != nil {
+		logStdout(fmt.Sprintf("Error opening %s: %s", log_file_path, err.Error()))
+		return
+	}
+
+	defer file.Close()
+
+	for message := range messages {
+		_, err := file.WriteString(message + "\n")
+		if err != nil {
+			logStdout(fmt.Sprintf("Error writing to %s: %s", log_file_path, err.Error))
+		}
+	}
+	
+}
 
 func sendResponse(client net.Conn, rq_info RequestHeader) (int, error) {
 	/* open file
@@ -274,7 +301,45 @@ func Server(client net.Conn) {
 	client.Close()
 }
 
+func parseCliArgs(argv []string) {
+
+	if len(argv) > 1 {
+		for argc, arg := range argv {
+			if argc == 0 {
+				continue
+			}
+
+			// all cli arguments have '=' 
+			arg_parts := strings.Split(arg, "=")
+			if len(arg_parts) < 2 {
+				fmt.Errorf(`"%s" is not a propper argument, must have '='\n`)
+				os.Exit(1)
+			}
+
+			switch(arg_parts[0]) {
+			case "debug":
+				switch(strings.ToLower(arg_parts[1])) {
+				case "true":
+					fmt.Printf("Debugging logs to stdout enabled.\n")
+					debug = true
+				case "false":
+					debug = false
+					fmt.Printf("Debugging logs to stdout disabled.\n")
+				default:
+					fmt.Errorf(`"%s": invalid argument to debug. Must be "true" or "false" (case-insensitive).`)
+					os.Exit(1)
+				}
+			case "log-file":
+				log_file_path = arg_parts[1]
+			}
+
+		}
+	}
+}
+
 func main() {
+
+	parseCliArgs(os.Args)
 
 
 	cert, err := tls.LoadX509KeyPair("cert/cert.pem", "cert/key.pem")
